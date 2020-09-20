@@ -80,6 +80,60 @@ COMMENT ON EXTENSION "uuid-ossp" IS 'generate universally unique identifiers (UU
 
 
 --
+-- Name: email; Type: DOMAIN; Schema: public; Owner: -
+--
+
+CREATE DOMAIN public.email AS public.citext NOT NULL
+	CONSTRAINT email_check CHECK ((VALUE OPERATOR(public.~*) '^[a-zA-Z0-9.!#$%&''*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$'::public.citext));
+
+
+--
+-- Name: iso2; Type: DOMAIN; Schema: public; Owner: -
+--
+
+CREATE DOMAIN public.iso2 AS public.citext NOT NULL
+	CONSTRAINT iso2_check CHECK ((VALUE OPERATOR(public.~*) '^[a-zA-Z]{2}$'::public.citext));
+
+
+--
+-- Name: iso3; Type: DOMAIN; Schema: public; Owner: -
+--
+
+CREATE DOMAIN public.iso3 AS public.citext NOT NULL
+	CONSTRAINT iso3_check CHECK ((VALUE OPERATOR(public.~*) '^[a-zA-Z]{3}$'::public.citext));
+
+
+--
+-- Name: lang_code; Type: DOMAIN; Schema: public; Owner: -
+--
+
+CREATE DOMAIN public.lang_code AS public.citext NOT NULL
+	CONSTRAINT lang_code_check CHECK ((VALUE OPERATOR(public.~*) '^[a-zA-Z]{2,5}$'::public.citext));
+
+
+--
+-- Name: login_attempt_status; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.login_attempt_status AS ENUM (
+    'success',
+    'failure'
+);
+
+
+--
+-- Name: token_type; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.token_type AS ENUM (
+    'PasswordResetToken',
+    'EmailVerificationToken',
+    'AccountRecoveryToken',
+    'JwtRefreshToken'
+);
+
+
+--
 -- Name: pg_search_dmetaphone(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -133,11 +187,75 @@ CREATE TABLE public.ar_internal_metadata (
 
 
 --
+-- Name: countries; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.countries (
+    iso2 public.iso2 NOT NULL,
+    iso3 public.iso3,
+    code smallint,
+    name character varying NOT NULL,
+    native character varying NOT NULL,
+    phonecode smallint
+);
+
+
+--
+-- Name: currencies; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.currencies (
+    iso3 public.iso3 NOT NULL,
+    name character varying(30),
+    symbol character varying(10),
+    active boolean DEFAULT false NOT NULL
+);
+
+
+--
 -- Name: data_migrations; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.data_migrations (
     version character varying NOT NULL
+);
+
+
+--
+-- Name: languages; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.languages (
+    code public.lang_code NOT NULL,
+    name character varying NOT NULL,
+    native character varying NOT NULL,
+    rtl boolean DEFAULT false NOT NULL,
+    active boolean DEFAULT false NOT NULL
+);
+
+
+--
+-- Name: login_attempts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.login_attempts (
+    id uuid DEFAULT public.gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    status public.login_attempt_status NOT NULL,
+    ip inet NOT NULL,
+    metadata jsonb NOT NULL,
+    created_at timestamp without time zone NOT NULL
+);
+
+
+--
+-- Name: permissions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.permissions (
+    id uuid DEFAULT public.gen_random_uuid() NOT NULL,
+    slug character varying NOT NULL,
+    name character varying NOT NULL
 );
 
 
@@ -161,6 +279,60 @@ CREATE TABLE public.pg_search_documents (
 
 CREATE TABLE public.schema_migrations (
     version character varying NOT NULL
+);
+
+
+--
+-- Name: time_zones; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.time_zones (
+    id uuid DEFAULT public.gen_random_uuid() NOT NULL,
+    country_iso2 public.iso2 NOT NULL,
+    abbreviation character varying(6) NOT NULL,
+    name character varying NOT NULL,
+    time_start numeric(11,0) NOT NULL,
+    gmt_offset integer NOT NULL
+);
+
+
+--
+-- Name: tokens; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.tokens (
+    id uuid DEFAULT public.gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    type public.token_type NOT NULL,
+    creation_ip inet,
+    usage_ip inet,
+    issued_at timestamp without time zone NOT NULL,
+    expired_at timestamp without time zone NOT NULL,
+    used_at timestamp without time zone
+);
+
+
+--
+-- Name: users; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.users (
+    id uuid DEFAULT public.gen_random_uuid() NOT NULL,
+    email public.email NOT NULL,
+    password_digest character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: users_permissions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.users_permissions (
+    id uuid DEFAULT public.gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    permission_id uuid NOT NULL
 );
 
 
@@ -189,11 +361,51 @@ ALTER TABLE ONLY public.ar_internal_metadata
 
 
 --
+-- Name: countries countries_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.countries
+    ADD CONSTRAINT countries_pkey PRIMARY KEY (iso2);
+
+
+--
+-- Name: currencies currencies_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.currencies
+    ADD CONSTRAINT currencies_pkey PRIMARY KEY (iso3);
+
+
+--
 -- Name: data_migrations data_migrations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.data_migrations
     ADD CONSTRAINT data_migrations_pkey PRIMARY KEY (version);
+
+
+--
+-- Name: languages languages_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.languages
+    ADD CONSTRAINT languages_pkey PRIMARY KEY (code);
+
+
+--
+-- Name: login_attempts login_attempts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.login_attempts
+    ADD CONSTRAINT login_attempts_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: permissions permissions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.permissions
+    ADD CONSTRAINT permissions_pkey PRIMARY KEY (id);
 
 
 --
@@ -210,6 +422,38 @@ ALTER TABLE ONLY public.pg_search_documents
 
 ALTER TABLE ONLY public.schema_migrations
     ADD CONSTRAINT schema_migrations_pkey PRIMARY KEY (version);
+
+
+--
+-- Name: time_zones time_zones_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.time_zones
+    ADD CONSTRAINT time_zones_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: tokens tokens_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.tokens
+    ADD CONSTRAINT tokens_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: users_permissions users_permissions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.users_permissions
+    ADD CONSTRAINT users_permissions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: users users_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT users_pkey PRIMARY KEY (id);
 
 
 --
@@ -234,10 +478,80 @@ CREATE UNIQUE INDEX index_active_storage_blobs_on_key ON public.active_storage_b
 
 
 --
+-- Name: index_languages_on_name; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_languages_on_name ON public.languages USING btree (name);
+
+
+--
+-- Name: index_languages_on_native; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_languages_on_native ON public.languages USING btree (native);
+
+
+--
+-- Name: index_login_attempts_on_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_login_attempts_on_user_id ON public.login_attempts USING btree (user_id);
+
+
+--
+-- Name: index_permissions_on_name; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_permissions_on_name ON public.permissions USING btree (name);
+
+
+--
+-- Name: index_permissions_on_slug; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_permissions_on_slug ON public.permissions USING btree (slug);
+
+
+--
 -- Name: index_pg_search_documents_on_searchable_type_and_searchable_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX index_pg_search_documents_on_searchable_type_and_searchable_id ON public.pg_search_documents USING btree (searchable_type, searchable_id);
+
+
+--
+-- Name: index_time_zones_on_name; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_time_zones_on_name ON public.time_zones USING btree (name);
+
+
+--
+-- Name: index_tokens_on_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_tokens_on_user_id ON public.tokens USING btree (user_id);
+
+
+--
+-- Name: index_users_on_email; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_users_on_email ON public.users USING btree (email);
+
+
+--
+-- Name: index_users_permissions_on_permission_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_users_permissions_on_permission_id ON public.users_permissions USING btree (permission_id);
+
+
+--
+-- Name: index_users_permissions_on_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_users_permissions_on_user_id ON public.users_permissions USING btree (user_id);
 
 
 --
@@ -246,6 +560,38 @@ CREATE INDEX index_pg_search_documents_on_searchable_type_and_searchable_id ON p
 
 ALTER TABLE ONLY public.active_storage_attachments
     ADD CONSTRAINT active_storage_attachments_active_storage_blobs_id FOREIGN KEY (blob_id) REFERENCES public.active_storage_blobs(id);
+
+
+--
+-- Name: login_attempts login_attempts_users_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.login_attempts
+    ADD CONSTRAINT login_attempts_users_id FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: tokens tokens_users_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.tokens
+    ADD CONSTRAINT tokens_users_id FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: users_permissions users_permissions_permissions_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.users_permissions
+    ADD CONSTRAINT users_permissions_permissions_id FOREIGN KEY (permission_id) REFERENCES public.permissions(id);
+
+
+--
+-- Name: users_permissions users_permissions_users_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.users_permissions
+    ADD CONSTRAINT users_permissions_users_id FOREIGN KEY (user_id) REFERENCES public.users(id);
 
 
 --
@@ -263,6 +609,21 @@ INSERT INTO "schema_migrations" (version) VALUES
 ('20200920224720'),
 ('20200920224721'),
 ('20200920224722'),
-('20200920224723');
+('20200920224723'),
+('20200920225706'),
+('20200920225707'),
+('20200920225708'),
+('20200920225709'),
+('20200920225710'),
+('20200920225711'),
+('20200920225712'),
+('20200920225713'),
+('20200920225714'),
+('20200920225715'),
+('20200920225716'),
+('20200920225717'),
+('20200920225718'),
+('20200920225719'),
+('20200920225720');
 
 
